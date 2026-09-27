@@ -30,7 +30,7 @@ html,body{max-width:100%;overflow-x:hidden}
 </style></head><body>
 <div id=login class=box><h2>Facebook Saved Organizer</h2><p>Online συγχρονισμένη βιβλιοθήκη</p><input id=e placeholder=Email><input id=p type=password placeholder=Password><button id=b>Σύνδεση</button><p id=m class=small>Έτοιμο.</p></div>
 <div id=app class="box hide"><h2>Facebook Saved Organizer — ONLINE</h2><p id=who></p>
-<p style="font-weight:700">📚 <span id="stableTotal">—</span> Saved &nbsp;|&nbsp; 📁 <span id="stableCats">—</span> Categories</p><div class=row><div><h3>Categories</h3><div id=cats></div>
+<p style="font-weight:700">📚 <span id="stableTotal">—</span> Saved &nbsp;|&nbsp; 📁 <span id="stableCats">—</span> Categories</p><div class=row><div><h3>Categories</h3><div id="allSavedRow" class="item" style="cursor:pointer;font-weight:700">📚 ΟΛΑ ΤΑ SAVED <span id="allSavedCount" style="float:right"></span></div><div id=cats></div>
 <hr><b>Καθαρισμός</b>
 <div id="cleanupUntitled" class="item" style="cursor:pointer">ΧΩΡΙΣ ΤΙΤΛΟ <span id="untitledN" style="float:right"></span></div>
 <div id="cleanupUncat" class="item" style="cursor:pointer">ΧΩΡΙΣ ΚΑΤΗΓΟΡΙΑ <span id="uncatN" style="float:right"></span></div>
@@ -243,6 +243,24 @@ migrateBtn.onclick=async()=>{
  }
  new MutationObserver(()=>setTimeout(()=>{updateCleanupCounts();installTitleButtons()},30)).observe(document.querySelector("#items"),{childList:true});
  setTimeout(()=>{updateCleanupCounts();installTitleButtons()},500);
+})();
+</script>
+
+<script>
+(function(){
+ function setupAll(){
+   const host=document.getElementById("items"),row=document.getElementById("allSavedRow");
+   if(!host||!row)return;
+   const rows=[...host.querySelectorAll(".item")];
+   allSavedCount.textContent=rows.length.toLocaleString("el-GR");
+   row.onclick=()=>{
+     rows.forEach(el=>{el.hidden=false;el.style.display=""});
+     document.querySelectorAll("#cats .item").forEach(x=>x.style.background="");
+     row.style.background="#e7f3ff";
+   };
+ }
+ new MutationObserver(()=>setTimeout(setupAll,20)).observe(document.getElementById("items"),{childList:true});
+ setTimeout(setupAll,500);
 })();
 </script>
 </body></html>
