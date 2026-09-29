@@ -58,7 +58,32 @@ function installMoves(){
  });
 }
 async function loadAllSaved(){let out=[],from=0,size=1000;while(true){let part=await req("/rest/v1/saved_items?select=*&order=added_to_organizer_at.desc",{headers:{"Range":from+"-"+(from+size-1),"Range-Unit":"items"}});out=out.concat(part);if(part.length<size)break;from+=size}return out}
-async function load(){try{let [c,i]=await Promise.all([req("/rest/v1/categories?select=*&order=name.asc"),loadAllSaved()]);cats.innerHTML=c.map(x=>'<div class=item>'+x.name+'</div>').join("")||"Καμία";sel.innerHTML='<option value="">Χωρίς κατηγορία</option>'+c.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join("");items.innerHTML=i.map(x=>'<div class="item" data-id="'+x.id+'"><b>'+(x.title||"Χωρίς τίτλο")+'</b><div class=small>'+(x.source_url||"")+'</div><select class="moveSel">'+c.map(z=>'<option value="'+z.id+'" '+(z.id===x.category_id?'selected':'')+'>'+z.name+'</option>').join("")+'</select><button class="moveBtn">Μεταφορά</button> <button class="titleBtn" type="button">✏️ Τίτλος</button></div>').join("")||"Κανένα"; setTimeout(installMoves,0);st.textContent="✅ Categories: "+c.length+" — Saved: "+i.length}catch(err){st.textContent="❌ "+err.message}}
+function safeText(v){return v==null?"":String(v)}
+function optionNode(value,label,selected){const o=document.createElement("option");o.value=safeText(value);o.textContent=safeText(label);o.selected=!!selected;return o}
+async function load(){
+ try{
+  let [c,i]=await Promise.all([req("/rest/v1/categories?select=*&order=name.asc"),loadAllSaved()]);
+  cats.replaceChildren();
+  if(!c.length) cats.textContent="Καμία";
+  else c.forEach(x=>{const d=document.createElement("div");d.className="item";d.textContent=safeText(x.name);cats.appendChild(d)});
+  sel.replaceChildren(optionNode("","Χωρίς κατηγορία",false));
+  c.forEach(x=>sel.appendChild(optionNode(x.id,x.name,false)));
+  items.replaceChildren();
+  if(!i.length) items.textContent="Κανένα";
+  else i.forEach(x=>{
+   const row=document.createElement("div");row.className="item";row.dataset.id=safeText(x.id);
+   const title=document.createElement("b");title.textContent=safeText(x.title||"Χωρίς τίτλο");
+   const link=document.createElement("div");link.className="small";link.textContent=safeText(x.source_url||"");
+   const move=document.createElement("select");move.className="moveSel";
+   move.appendChild(optionNode("","Χωρίς κατηγορία",!x.category_id));
+   c.forEach(z=>move.appendChild(optionNode(z.id,z.name,z.id===x.category_id)));
+   const moveBtn=document.createElement("button");moveBtn.className="moveBtn";moveBtn.type="button";moveBtn.textContent="Μεταφορά";
+   const titleBtn=document.createElement("button");titleBtn.className="titleBtn";titleBtn.type="button";titleBtn.textContent="✏️ Τίτλος";
+   row.append(title,link,move,moveBtn,document.createTextNode(" "),titleBtn);items.appendChild(row);
+  });
+  setTimeout(installMoves,0);st.textContent="✅ Categories: "+c.length+" — Saved: "+i.length;
+ }catch(err){st.textContent="❌ "+err.message}
+}
 b.onclick=async()=>{m.textContent="Σύνδεση…";try{let r=await fetch(BASE+"/auth/v1/token?grant_type=password",{method:"POST",headers:{"apikey":KEY,"Content-Type":"application/json"},body:JSON.stringify({email:e.value.trim(),password:p.value})}),d=await r.json();if(!r.ok)throw new Error(d.msg||d.message);token=d.access_token;uid=d.user.id;who.textContent=d.user.email;login.classList.add("hide");app.classList.remove("hide");await load()}catch(err){m.textContent="❌ "+err.message}};
 add.onclick=async()=>{try{await req("/rest/v1/saved_items",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:uid,title:ti.value.trim()||null,source_url:url.value.trim()||null,category_id:sel.value||null})});ti.value="";url.value="";await load()}catch(err){st.textContent="❌ "+err.message}};
 out.onclick=()=>location.reload();
