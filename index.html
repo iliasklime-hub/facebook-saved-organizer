@@ -288,4 +288,197 @@ migrateBtn.onclick=async()=>{
  setTimeout(setupAll,500);
 })();
 </script>
+
+<style id="v2-subcategories-style">
+.subcatPanel{margin:4px 0 10px 16px;padding-left:10px;border-left:2px solid #e5e7eb}
+.subcatRow{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;font-size:13px;cursor:pointer}
+.subcatRow:hover{background:#f3f4f6}
+.subcatRow.active{background:#e7f3ff}
+.subcatName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subcatCount{font-size:11px;color:#667085}
+.subcatActions{display:flex;gap:3px}
+.subcatActions button,.addSubcatBtn{padding:3px 6px;font-size:11px}
+.itemSubcat{margin-top:6px}
+.itemSubcatLabel{font-size:11px;color:#667085;margin-bottom:2px}
+.subcatSelect{width:100%}
+</style>
+
+
+<script id="v2-subcategories-script">
+(function(){
+  let subcats=[];
+  let selectedSubcategory=null;
+
+  function esc(v){return v==null?"":String(v)}
+  function opt(value,label,selected){
+    const o=document.createElement("option");
+    o.value=esc(value); o.textContent=esc(label); o.selected=!!selected; return o;
+  }
+  async function loadSubcats(){
+    subcats=await req("/rest/v1/subcategories?select=*&order=sort_order.asc,name.asc");
+    return subcats;
+  }
+  async function loadItemSubcategoryMap(){
+    const data=await req("/rest/v1/saved_items?select=id,category_id,subcategory_id");
+    return new Map(data.map(x=>[String(x.id),x]));
+  }
+  function catName(el){
+    return el.childNodes[0]?.textContent?.trim() || el.textContent.trim();
+  }
+  function categoryMap(){
+    const m=new Map();
+    [...document.querySelectorAll("#sel option")].filter(o=>o.value).forEach(o=>m.set(o.textContent.trim(),o.value));
+    return m;
+  }
+  function rows(){return [...document.querySelectorAll("#items .item[data-id]")]}
+
+  async function refreshSubcategoryUI(){
+    try{
+      await loadSubcats();
+      const itemMap=await loadItemSubcategoryMap();
+      const cmap=categoryMap();
+
+      // Category sidebar: subcategories + CRUD
+      document.querySelectorAll("#cats .item").forEach(cat=>{
+        const name=catName(cat), cid=cmap.get(name);
+        if(!cid)return;
+
+        let panel=cat.nextElementSibling;
+        if(!panel || !panel.classList.contains("subcatPanel")){
+          panel=document.createElement("div");
+          panel.className="subcatPanel";
+          cat.insertAdjacentElement("afterend",panel);
+        }
+        panel.replaceChildren();
+
+        const addBtn=document.createElement("button");
+        addBtn.type="button"; addBtn.className="addSubcatBtn"; addBtn.textContent="+ Υποκατηγορία";
+        addBtn.onclick=async(e)=>{
+          e.stopPropagation();
+          const name=prompt("Όνομα νέας υποκατηγορίας:");
+          if(!name || !name.trim())return;
+          try{
+            await req("/rest/v1/subcategories",{method:"POST",headers:{"Prefer":"return=minimal"},
+              body:JSON.stringify({user_id:uid,category_id:cid,name:name.trim()})});
+            await refreshSubcategoryUI();
+          }catch(err){alert("❌ "+err.message)}
+        };
+        panel.appendChild(addBtn);
+
+        subcats.filter(x=>x.category_id===cid).forEach(sc=>{
+          const r=document.createElement("div"); r.className="subcatRow"; r.dataset.sid=sc.id;
+          if(selectedSubcategory===sc.id)r.classList.add("active");
+          const n=document.createElement("span"); n.className="subcatName"; n.textContent=sc.name;
+          const count=document.createElement("span"); count.className="subcatCount";
+          count.textContent=[...itemMap.values()].filter(x=>x.subcategory_id===sc.id).length;
+          const acts=document.createElement("span"); acts.className="subcatActions";
+          const ren=document.createElement("button"); ren.type="button"; ren.textContent="✏️";
+          ren.title="Μετονομασία";
+          ren.onclick=async(e)=>{
+            e.stopPropagation();
+            const v=prompt("Νέο όνομα υποκατηγορίας:",sc.name);
+            if(v===null || !v.trim() || v.trim()===sc.name)return;
+            try{
+              await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(sc.id),{method:"PATCH",
+                headers:{"Prefer":"return=minimal"},body:JSON.stringify({name:v.trim(),updated_at:new Date().toISOString()})});
+              await refreshSubcategoryUI();
+            }catch(err){alert("❌ "+err.message)}
+          };
+          const del=document.createElement("button"); del.type="button"; del.textContent="🗑";
+          del.title="Διαγραφή";
+          del.onclick=async(e)=>{
+            e.stopPropagation();
+            if(!confirm('Διαγραφή υποκατηγορίας "'+sc.name+'";\n\nΤα Saved Items ΔΕΝ θα διαγραφούν. Θα μείνουν στην κατηγορία χωρίς υποκατηγορία.'))return;
+            try{
+              await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(sc.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});
+              if(selectedSubcategory===sc.id)selectedSubcategory=null;
+              await load(); setTimeout(refreshSubcategoryUI,80);
+            }catch(err){alert("❌ "+err.message)}
+          };
+          acts.append(ren,del); r.append(n,count,acts);
+          r.onclick=(e)=>{
+            e.stopPropagation();
+            selectedSubcategory=(selectedSubcategory===sc.id?null:sc.id);
+            applySubcategoryFilter();
+            document.querySelectorAll(".subcatRow").forEach(x=>x.classList.toggle("active",x.dataset.sid===selectedSubcategory));
+          };
+          panel.appendChild(r);
+        });
+      });
+
+      // Saved cards: second dropdown for subcategory
+      rows().forEach(el=>{
+        const db=itemMap.get(String(el.dataset.id));
+        const catSel=el.querySelector(".moveSel");
+        if(!db || !catSel)return;
+
+        let wrap=el.querySelector(".itemSubcat");
+        if(!wrap){
+          wrap=document.createElement("div"); wrap.className="itemSubcat";
+          const lab=document.createElement("div"); lab.className="itemSubcatLabel"; lab.textContent="Υποκατηγορία";
+          const ss=document.createElement("select"); ss.className="subcatSelect";
+          wrap.append(lab,ss);
+          const moveBtn=el.querySelector(".moveBtn");
+          if(moveBtn) moveBtn.insertAdjacentElement("afterend",wrap); else el.appendChild(wrap);
+        }
+        const ss=wrap.querySelector(".subcatSelect");
+        const rebuild=()=>{
+          const cid=catSel.value;
+          ss.replaceChildren(opt("","Χωρίς υποκατηγορία",!db.subcategory_id));
+          subcats.filter(x=>x.category_id===cid).forEach(sc=>ss.appendChild(opt(sc.id,sc.name,sc.id===db.subcategory_id)));
+          ss.disabled=!cid;
+        };
+        rebuild();
+
+        catSel.onchange=async()=>{
+          // Category changed in UI: reset subcategory immediately because it may belong to another category.
+          db.category_id=catSel.value||null; db.subcategory_id=null; rebuild();
+        };
+        ss.onchange=async()=>{
+          try{
+            await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(el.dataset.id),{method:"PATCH",
+              headers:{"Prefer":"return=minimal"},body:JSON.stringify({subcategory_id:ss.value||null})});
+            db.subcategory_id=ss.value||null;
+            st.textContent="✅ Η υποκατηγορία αποθηκεύτηκε.";
+            await refreshSubcategoryUI();
+          }catch(err){st.textContent="❌ "+err.message}
+        };
+
+        // Replace category move behavior so category + subcategory stay consistent.
+        const mb=el.querySelector(".moveBtn");
+        if(mb){
+          mb.onclick=async()=>{
+            try{
+              st.textContent="Μεταφορά στη βάση…";
+              await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(el.dataset.id),{method:"PATCH",
+                headers:{"Prefer":"return=minimal"},
+                body:JSON.stringify({category_id:catSel.value||null,subcategory_id:ss.value||null})});
+              st.textContent="✅ Κατηγορία / υποκατηγορία ενημερώθηκαν.";
+              await load(); setTimeout(refreshSubcategoryUI,80);
+            }catch(err){st.textContent="❌ "+err.message}
+          };
+        }
+      });
+      applySubcategoryFilter();
+    }catch(err){
+      console.error("Subcategories UI:",err);
+      if(window.st)st.textContent="❌ Subcategories: "+err.message;
+    }
+  }
+
+  function applySubcategoryFilter(){
+    if(!selectedSubcategory)return;
+    rows().forEach(el=>{
+      const ss=el.querySelector(".subcatSelect");
+      el.hidden=!(ss && ss.value===selectedSubcategory);
+    });
+  }
+
+  // After every DB render, rebuild subcategory UI.
+  const itemsHost=document.getElementById("items");
+  if(itemsHost)new MutationObserver(()=>setTimeout(refreshSubcategoryUI,100)).observe(itemsHost,{childList:true});
+  setTimeout(refreshSubcategoryUI,900);
+})();
+</script>
+
 </body></html>
