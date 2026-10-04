@@ -27,13 +27,11 @@ html,body{max-width:100%;overflow-x:hidden}
 #items.listView .item{display:block;width:100%;margin-bottom:6px}
 @media(max-width:1050px){#items.cardsView{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:750px){#items.cardsView{grid-template-columns:1fr}}
+</style><style id="subcategories-card-css">
+#items .subcatSelect{width:100%;box-sizing:border-box;margin:2px 0 6px;padding:7px}
 </style>
-<style id="v2-subcategories-style">
-.subcatPanel{margin:4px 0 10px 16px;padding-left:10px;border-left:2px solid #e5e7eb}
-.subcatRow{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;font-size:13px;cursor:pointer}
-.subcatRow:hover{background:#f3f4f6}.subcatName{flex:1}.subcatCount{font-size:11px;color:#667085}
-.subcatActions{display:flex;gap:3px}.subcatActions button,.addSubcatBtn{padding:3px 6px;font-size:11px}
-.itemSubcat{margin-top:6px}.itemSubcatLabel{font-size:11px;color:#667085;margin-bottom:2px}.subcatSelect{width:100%}
+<style id="current-path-css">
+.currentPathV8{font-size:13px;font-weight:700;color:#374151;background:#f8fafc;border:1px solid #e5e7eb;border-radius:7px;padding:7px 9px;margin:0 0 8px}
 </style>
 </head><body>
 <div id=login class=box><h2>Facebook Saved Organizer</h2><p>Online συγχρονισμένη βιβλιοθήκη</p><input id=e placeholder=Email><input id=p type=password placeholder=Password><button id=b>Σύνδεση</button><p id=m class=small>Έτοιμο.</p></div>
@@ -42,7 +40,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <hr><b>Καθαρισμός</b>
 <div id="cleanupUntitled" class="item" style="cursor:pointer">ΧΩΡΙΣ ΤΙΤΛΟ <span id="untitledN" style="float:right"></span></div>
 <div id="cleanupUncat" class="item" style="cursor:pointer">ΧΩΡΙΣ ΚΑΤΗΓΟΡΙΑ <span id="uncatN" style="float:right"></span></div>
-<div id="cleanupMulti" class="item" style="cursor:pointer">ΑΡΧΙΚΑ ΣΕ ΠΟΛΛΕΣ ΚΑΤΗΓΟΡΙΕΣ <span id="multiN" style="float:right"></span></div></div><div><h3>Saved Items</h3><div class="toolbar"><input id="searchSaved" placeholder="Αναζήτηση Saved…"><button id="cardViewBtn" class="viewbtn active">▦ Κάρτες</button><button id="listViewBtn" class="viewbtn">☰ Λίστα</button></div><div id=items class="cardsView"></div></div></div><hr><h3>Δοκιμαστικό Saved</h3><input id=ti placeholder="Τίτλος"><input id=url placeholder="https://..."><select id=sel><option value="">Χωρίς κατηγορία</option></select><button id=add>Προσθήκη online</button><p id=st class=small></p><hr><details><summary><b>Αρχική εισαγωγή Facebook / Migration</b></summary><h3>Αρχική εισαγωγή Facebook</h3>
+<div id="cleanupMulti" class="item" style="cursor:pointer">ΑΡΧΙΚΑ ΣΕ ΠΟΛΛΕΣ ΚΑΤΗΓΟΡΙΕΣ <span id="multiN" style="float:right"></span></div></div><div><h3>Saved Items</h3><div id="currentPathV8" class="currentPathV8">📁 ΟΛΑ ΤΑ SAVED</div><div class="toolbar"><input id="searchSaved" placeholder="Αναζήτηση Saved…"><button id="cardViewBtn" class="viewbtn active">▦ Κάρτες</button><button id="listViewBtn" class="viewbtn">☰ Λίστα</button></div><div id=items class="cardsView"></div></div></div><hr><h3>Δοκιμαστικό Saved</h3><input id=ti placeholder="Τίτλος"><input id=url placeholder="https://..."><select id=sel><option value="">Χωρίς κατηγορία</option></select><button id=add>Προσθήκη online</button><p id=st class=small></p><hr><details><summary><b>Αρχική εισαγωγή Facebook / Migration</b></summary><h3>Αρχική εισαγωγή Facebook</h3>
 <p class="small"><b>Έτοιμα για εισαγωγή:</b> 18 Collections / 1581 μοναδικά Saved.</p>
 <button id="migrateBtn">Εισαγωγή πραγματικών Collections</button>
 <p id="migMsg" class="small">Δεν έχει ξεκινήσει εισαγωγή.</p></details>
@@ -70,110 +68,54 @@ function safeText(v){return v==null?"":String(v)}
 function optionNode(value,label,selected){const o=document.createElement("option");o.value=safeText(value);o.textContent=safeText(label);o.selected=!!selected;return o}
 async function load(){
  try{
-  let [c,i,sc]=await Promise.all([
-    req("/rest/v1/categories?select=*&order=name.asc"),
-    loadAllSaved(),
-    req("/rest/v1/subcategories?select=*&order=sort_order.asc,name.asc")
-  ]);
-
+  let [c,i,scv6]=await Promise.all([req("/rest/v1/categories?select=*&order=name.asc"),loadAllSaved(),req("/rest/v1/subcategories?select=*&order=sort_order.asc,name.asc")]);
+   window.__savedItems=i;
   cats.replaceChildren();
   if(!c.length) cats.textContent="Καμία";
-  else c.forEach(x=>{
-    const d=document.createElement("div");d.className="item";d.textContent=safeText(x.name);d.dataset.cid=x.id;
-    cats.appendChild(d);
-
-    const panel=document.createElement("div");panel.className="subcatPanel";
-    const addSub=document.createElement("button");addSub.type="button";addSub.className="addSubcatBtn";addSub.textContent="+ Υποκατηγορία";
-    addSub.onclick=async ev=>{
-      ev.stopPropagation();
-      const name=prompt("Όνομα νέας υποκατηγορίας:");
-      if(!name||!name.trim())return;
-      try{
-        await req("/rest/v1/subcategories",{method:"POST",headers:{"Prefer":"return=minimal"},
-          body:JSON.stringify({user_id:uid,category_id:x.id,name:name.trim()})});
-        await load();
-      }catch(err){alert("❌ "+err.message)}
-    };
-    panel.appendChild(addSub);
-
-    sc.filter(z=>z.category_id===x.id).forEach(z=>{
-      const r=document.createElement("div");r.className="subcatRow";
-      const n=document.createElement("span");n.className="subcatName";n.textContent=z.name;
-      const cnt=document.createElement("span");cnt.className="subcatCount";
-      cnt.textContent=i.filter(q=>q.subcategory_id===z.id).length;
-      const acts=document.createElement("span");acts.className="subcatActions";
-      const ren=document.createElement("button");ren.type="button";ren.textContent="✏️";
-      ren.onclick=async ev=>{
-        ev.stopPropagation();
-        const v=prompt("Νέο όνομα υποκατηγορίας:",z.name);
-        if(v===null||!v.trim()||v.trim()===z.name)return;
-        try{
-          await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(z.id),{method:"PATCH",
-            headers:{"Prefer":"return=minimal"},body:JSON.stringify({name:v.trim(),updated_at:new Date().toISOString()})});
-          await load();
-        }catch(err){alert("❌ "+err.message)}
-      };
-      const del=document.createElement("button");del.type="button";del.textContent="🗑";
-      del.onclick=async ev=>{
-        ev.stopPropagation();
-        if(!confirm('Διαγραφή υποκατηγορίας "'+z.name+'";\nΤα Saved Items θα μείνουν στην κατηγορία χωρίς υποκατηγορία.'))return;
-        try{
-          await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(z.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});
-          await load();
-        }catch(err){alert("❌ "+err.message)}
-      };
-      r.onclick=()=>{document.querySelectorAll("#items .item").forEach(el=>el.hidden=el.dataset.sid!==z.id)};
-      acts.append(ren,del);r.append(n,cnt,acts);panel.appendChild(r);
-    });
-    cats.appendChild(panel);
-  });
-
+  else c.forEach(x=>{const d=document.createElement("div");d.className="item";d.textContent=safeText(x.name);cats.appendChild(d)});
   sel.replaceChildren(optionNode("","Χωρίς κατηγορία",false));
   c.forEach(x=>sel.appendChild(optionNode(x.id,x.name,false)));
-
   items.replaceChildren();
   if(!i.length) items.textContent="Κανένα";
   else i.forEach(x=>{
-   const row=document.createElement("div");row.className="item";row.dataset.id=safeText(x.id);row.dataset.sid=safeText(x.subcategory_id||"");
+   const row=document.createElement("div");row.className="item";row.dataset.id=safeText(x.id);
    const title=document.createElement("b");title.textContent=safeText(x.title||"Χωρίς τίτλο");
    const link=document.createElement("div");link.className="small";link.textContent=safeText(x.source_url||"");
    const move=document.createElement("select");move.className="moveSel";
    move.appendChild(optionNode("","Χωρίς κατηγορία",!x.category_id));
    c.forEach(z=>move.appendChild(optionNode(z.id,z.name,z.id===x.category_id)));
-
-   const subWrap=document.createElement("div");subWrap.className="itemSubcat";
-   const subLab=document.createElement("div");subLab.className="itemSubcatLabel";subLab.textContent="Υποκατηγορία";
-   const subSel=document.createElement("select");subSel.className="subcatSelect";
-   function rebuildSub(){
-     subSel.replaceChildren(optionNode("","Χωρίς υποκατηγορία",!x.subcategory_id));
-     sc.filter(z=>z.category_id===move.value).forEach(z=>subSel.appendChild(optionNode(z.id,z.name,z.id===x.subcategory_id)));
-     subSel.disabled=!move.value;
-   }
-   rebuildSub();
-   move.onchange=()=>{x.category_id=move.value||null;x.subcategory_id=null;rebuildSub()};
-
-   const moveBtn=document.createElement("button");moveBtn.className="moveBtn";moveBtn.type="button";moveBtn.textContent="Μεταφορά";
-   moveBtn.onclick=async()=>{
+   const subLabel=document.createElement("div");subLabel.className="small";subLabel.textContent="Υποκατηγορία";
+   const subMove=document.createElement("select");subMove.className="subcatSelect";
+   subMove.appendChild(optionNode("","Χωρίς υποκατηγορία",!x.subcategory_id));
+   scv6.filter(q=>q.category_id===x.category_id).forEach(q=>subMove.appendChild(optionNode(q.id,q.name,q.id===x.subcategory_id)));
+   subMove.disabled=!x.category_id;
+   subMove.onchange=async()=>{
+     const previous=x.subcategory_id||"";
+     const chosen=subMove.value||null;
+     subMove.disabled=true;
+     st.textContent="Αποθήκευση υποκατηγορίας...";
      try{
-       await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(x.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},
-         body:JSON.stringify({category_id:move.value||null,subcategory_id:subSel.value||null})});
-       await load();
-     }catch(err){st.textContent="❌ "+err.message}
-   };
-   subSel.onchange=async()=>{
-     try{
-       await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(x.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},
-         body:JSON.stringify({subcategory_id:subSel.value||null})});
-       x.subcategory_id=subSel.value||null;row.dataset.sid=safeText(x.subcategory_id||"");
+       const saved=await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(x.id)+"&user_id=eq."+encodeURIComponent(uid),
+         {method:"PATCH",
+          headers:{"Prefer":"return=representation"},
+          body:JSON.stringify({subcategory_id:chosen})});
+       if(!Array.isArray(saved)||saved.length!==1) throw new Error("Η βάση δεν επιβεβαίωσε την αλλαγή.");
+       x.subcategory_id=saved[0].subcategory_id||null;
        st.textContent="✅ Η υποκατηγορία αποθηκεύτηκε.";
-     }catch(err){st.textContent="❌ "+err.message}
+       await load();
+       setTimeout(()=>{ if(typeof decorate==="function") decorate(); },100);
+     }catch(err){
+       subMove.value=previous;
+       subMove.disabled=false;
+       st.textContent="❌ Αποτυχία αποθήκευσης υποκατηγορίας: "+err.message;
+       console.error("subcategory save failed",err);
+     }
    };
-
+   const moveBtn=document.createElement("button");moveBtn.className="moveBtn";moveBtn.type="button";moveBtn.textContent="Μεταφορά";
    const titleBtn=document.createElement("button");titleBtn.className="titleBtn";titleBtn.type="button";titleBtn.textContent="✏️ Τίτλος";
-   subWrap.append(subLab,subSel);
-   row.append(title,link,move,moveBtn,subWrap,titleBtn);items.appendChild(row);
+   row.append(title,link,move,subLabel,subMove,moveBtn,document.createTextNode(" "),titleBtn);items.appendChild(row);
   });
-  setTimeout(installMoves,0);st.textContent="✅ Categories: "+c.length+" — Subcategories: "+sc.length+" — Saved: "+i.length;
+  setTimeout(installMoves,0);st.textContent="✅ Categories: "+c.length+" — Saved: "+i.length;
  }catch(err){st.textContent="❌ "+err.message}
 }
 b.onclick=async()=>{m.textContent="Σύνδεση…";try{let r=await fetch(BASE+"/auth/v1/token?grant_type=password",{method:"POST",headers:{"apikey":KEY,"Content-Type":"application/json"},body:JSON.stringify({email:e.value.trim(),password:p.value})}),d=await r.json();if(!r.ok)throw new Error(d.msg||d.message);token=d.access_token;uid=d.user.id;who.textContent=d.user.email;login.classList.add("hide");app.classList.remove("hide");await load()}catch(err){m.textContent="❌ "+err.message}};
@@ -380,4 +322,172 @@ migrateBtn.onclick=async()=>{
  setTimeout(setupAll,500);
 })();
 </script>
+
+
+<style id="subcategories-css">
+.subcatPanel{margin:3px 0 8px 14px;padding-left:8px;border-left:2px solid #e5e7eb}
+.subcatAdd{padding:3px 7px;font-size:11px;margin:3px 0}
+.subcatRow{display:flex;align-items:center;gap:5px;padding:4px 5px;font-size:12px;border-radius:6px;cursor:pointer}
+.subcatRow:hover{background:#f3f4f6}.subcatRow.active{background:#e7f3ff}
+.subcatName{flex:1}.subcatCount{font-size:11px;color:#667085}.subcatAct{padding:2px 5px;font-size:10px}
+.subcatBox{margin:6px 0}.subcatBox label{display:block;font-size:11px;color:#667085;margin-bottom:2px}
+.subcatBox select{width:100%;box-sizing:border-box;padding:7px}
+</style>
+<script id="subcategories-js">
+(function(){
+ let decorating=false, subcats=[], assignments=new Map(), selectedSub=null;
+
+ function ready(){
+   const a=document.getElementById("app");
+   return a && !a.classList.contains("hide") && typeof req==="function" && typeof uid!=="undefined" && !!uid;
+ }
+ async function fetchV4(){
+   const [s,a]=await Promise.all([
+     req("/rest/v1/subcategories?select=*&order=sort_order.asc,name.asc"),
+     req("/rest/v1/saved_items?select=id,category_id,subcategory_id")
+   ]);
+   subcats=s; assignments=new Map(a.map(x=>[String(x.id),x]));
+ }
+ function catId(name){
+   const sel=document.getElementById("sel");
+   if(!sel)return null;
+   const o=[...sel.options].find(o=>o.value && o.textContent.trim()===name);
+   return o?o.value:null;
+ }
+ function filterItems(){
+   document.querySelectorAll("#items .item[data-id]").forEach(card=>{
+     card.hidden=!!selectedSub && card.dataset.subcategoryId!==selectedSub;
+   });
+ }
+ function setCurrentPath(catName,subName){
+   const el=document.getElementById("currentPathV8"); if(!el)return;
+   el.textContent="📁 "+(catName||"ΟΛΑ ΤΑ SAVED")+(subName?" › "+subName:"");
+ }
+ function renderCats(){
+   document.querySelectorAll(".subcatPanel[data-subcat-panel='1']").forEach(x=>x.remove());
+   document.querySelectorAll("#cats > .item").forEach(cat=>{
+     const name=(cat.childNodes[0]?.textContent||cat.textContent).trim(), cid=catId(name);
+     if(!cid)return;
+     const p=document.createElement("div");p.className="subcatPanel";p.dataset.v4="1";
+     const add=document.createElement("button");add.type="button";add.className="subcatAdd";add.textContent="+ Υποκατηγορία";
+     add.onclick=async e=>{
+       e.stopPropagation(); const n=prompt("Όνομα νέας υποκατηγορίας:");
+       if(!n||!n.trim())return;
+       try{
+         const created=await req("/rest/v1/subcategories",
+           {method:"POST",headers:{"Prefer":"return=representation"},
+            body:JSON.stringify({user_id:uid,category_id:cid,name:n.trim()})});
+         if(!Array.isArray(created)||created.length!==1) throw new Error("Η βάση δεν επιβεβαίωσε τη δημιουργία.");
+         if(typeof load==="function") await load();
+         await decorate();
+         if(typeof st!=="undefined") st.textContent="✅ Η υποκατηγορία δημιουργήθηκε.";
+       }catch(err){alert("❌ "+err.message)}
+     }; p.appendChild(add);
+
+     subcats.filter(x=>x.category_id===cid).forEach(sc=>{
+       const r=document.createElement("div");r.className="subcatRow";r.dataset.sid=sc.id;
+       r.classList.toggle("active",selectedSub===sc.id);
+       const n=document.createElement("span");n.className="subcatName";n.textContent=sc.name;
+       const c=document.createElement("span");c.className="subcatCount";
+       c.textContent=(window.__savedItems||[]).filter(x=>String(x.subcategory_id||"")===String(sc.id)).length;
+       const ed=document.createElement("button");ed.type="button";ed.className="subcatAct";ed.textContent="✏️";
+       ed.onclick=async e=>{e.stopPropagation();const v=prompt("Νέο όνομα:",sc.name);
+         if(v===null||!v.trim()||v.trim()===sc.name)return;
+         try{
+           const renamed=await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(sc.id),
+             {method:"PATCH",headers:{"Prefer":"return=representation"},
+              body:JSON.stringify({name:v.trim(),updated_at:new Date().toISOString()})});
+           if(!Array.isArray(renamed)||renamed.length!==1) throw new Error("Η βάση δεν επιβεβαίωσε τη μετονομασία.");
+           if(typeof load==="function") await load();
+           await decorate();
+         }catch(err){alert("❌ "+err.message)}
+       };
+       const dl=document.createElement("button");dl.type="button";dl.className="subcatAct";dl.textContent="🗑";
+       dl.onclick=async e=>{
+         e.stopPropagation();
+         if(!confirm('Διαγραφή υποκατηγορίας "'+sc.name+'";\nΤα Saved θα παραμείνουν στην κύρια κατηγορία ως "Χωρίς υποκατηγορία".'))return;
+         try{
+           // 1. Detach every Saved from this subcategory first.
+           await req("/rest/v1/saved_items?subcategory_id=eq."+encodeURIComponent(sc.id)+"&user_id=eq."+encodeURIComponent(uid),
+             {method:"PATCH",headers:{"Prefer":"return=representation"},
+              body:JSON.stringify({subcategory_id:null})});
+
+           // 2. Delete the now-empty subcategory and verify deletion.
+           const deleted=await req("/rest/v1/subcategories?id=eq."+encodeURIComponent(sc.id),
+             {method:"DELETE",headers:{"Prefer":"return=representation"}});
+           if(!Array.isArray(deleted)||deleted.length!==1) throw new Error("Η βάση δεν επιβεβαίωσε τη διαγραφή.");
+
+           if(selectedSub===sc.id) selectedSub=null;
+
+           // 3. Reload the active app so cards are rebuilt from fresh DB state.
+           if(typeof load==="function") await load();
+           await decorate();
+
+           if(typeof st!=="undefined") st.textContent='✅ Η υποκατηγορία διαγράφηκε. Τα Saved παρέμειναν στην κύρια κατηγορία.';
+         }catch(err){
+           alert("❌ "+err.message);
+           console.error("subcategory delete failed",err);
+         }
+       };
+       r.onclick=e=>{e.stopPropagation();selectedSub=selectedSub===sc.id?null:sc.id;filterItems();
+         setCurrentPath(name,selectedSub?sc.name:null);
+         document.querySelectorAll(".subcatRow").forEach(x=>x.classList.toggle("active",x.dataset.sid===selectedSub));};
+       r.append(n,c,ed,dl);p.appendChild(r);
+     });
+     cat.insertAdjacentElement("afterend",p);
+   });
+ }
+ function renderCards(){
+   document.querySelectorAll("#items .item[data-id]").forEach(card=>{
+     const db=assignments.get(String(card.dataset.id)), category=[...card.querySelectorAll("select")].find(x=>!x.classList.contains("subcatSelectInjected"));
+     if(!db||!category)return;
+     card.dataset.subcategoryId=db.subcategory_id||"";
+
+     card.querySelectorAll(".subcatBox").forEach(x=>x.remove());
+     const box=document.createElement("div");box.className="subcatBox";
+     const lab=document.createElement("label");lab.textContent="Υποκατηγορία";
+     const ss=document.createElement("select");ss.className="subcatSelectInjected";ss.className="subcatSelectInjected";
+     const none=document.createElement("option");none.value="";none.textContent="Χωρίς υποκατηγορία";ss.appendChild(none);
+     subcats.filter(x=>x.category_id===category.value).forEach(sc=>{
+       const o=document.createElement("option");o.value=sc.id;o.textContent=sc.name;o.selected=sc.id===db.subcategory_id;ss.appendChild(o);
+     });
+     ss.disabled=!category.value;
+     ss.onchange=async()=>{
+       try{
+         await req("/rest/v1/saved_items?id=eq."+encodeURIComponent(card.dataset.id),
+           {method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({subcategory_id:ss.value||null})});
+         db.subcategory_id=ss.value||null;card.dataset.subcategoryId=db.subcategory_id||"";
+         if(typeof st!=="undefined")st.textContent="✅ Υποκατηγορία αποθηκεύτηκε.";
+         await decorate();
+       }catch(err){if(typeof st!=="undefined")st.textContent="❌ "+err.message}
+     };
+     box.append(lab,ss);
+
+     // Put selector immediately after the category selector so it is always visible.
+     category.insertAdjacentElement("afterend",box);
+   });
+ }
+ async function decorate(){
+   if(decorating||!ready())return; decorating=true;
+   try{await fetchV4();renderCats();filterItems();
+     if(typeof st!=="undefined" && !String(st.textContent||"").startsWith("❌"))st.textContent="✅ Subcategories: "+subcats.length;
+   }catch(err){console.error("Subcategories",err);if(typeof st!=="undefined")st.textContent="❌ Subcategories: "+err.message}
+   finally{decorating=false}
+ }
+ 
+ document.addEventListener("click",function(e){
+   const cat=e.target.closest && e.target.closest("#cats > .item");
+   if(cat){
+     const name=(cat.childNodes[0]?.textContent||cat.textContent).trim();
+     setCurrentPath(name,null);
+   }
+ },true);
+
+ const t=setInterval(()=>{if(!ready())return;clearInterval(t);decorate();
+   const host=document.getElementById("items");
+   if(host)new MutationObserver(()=>setTimeout(decorate,120)).observe(host,{childList:true});
+ },250);
+})();
+</script>
+
 </body></html>
